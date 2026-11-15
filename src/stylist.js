@@ -74,11 +74,17 @@ function candidate(items, anchor, mood) {
       else o.outer = anchor
     } else return null
   }
-  const wantDress = o.dress || (!o.top && !o.bottom && !o.base && dresses.length && r < (['night', 'girly', 'boho'].includes(mood) ? 0.45 : 0.16))
+  // with no bottoms in the wardrobe, lean on dresses rather than giving up
+  const noBottoms = !bottoms.length
+  const dressOdds = ['night', 'girly', 'boho'].includes(mood) ? 0.45 : 0.16
+  const wantDress = o.dress || (!o.top && !o.bottom && !o.base && dresses.length && (noBottoms || r < dressOdds))
   if (wantDress) {
     o.dress = o.dress || pick(dresses)
   } else {
-    if (!o.bottom) { if (!bottoms.length) return null; o.bottom = pick(bottoms) }
+    if (!o.bottom) {
+      if (bottoms.length) o.bottom = pick(bottoms)
+      else if (!o.top && !o.base && !o.outer) return null
+    }
     if (!o.top) {
       const pool = [...tops, ...tops, ...layers.filter((l) => TOPPABLE.includes(l.sub))].filter((t) => t !== o.outer && t !== o.base)
       if (!pool.length) return null

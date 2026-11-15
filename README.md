@@ -22,21 +22,17 @@ scores your looks; and a wishlist tracks what to buy next.
 
 ## Where the garment images come from
 
-Each piece is either a **photo cutout** (background removed from the original wardrobe
-photo) or a **drawn garment** (a vector template tinted to the real colour, with the
-actual print or graphic lifted off the photo). `src/source.json` records which is which
-— currently 48 photos and 49 drawings. The originals live in `public/wardrobe/photo/`.
+Every piece is a cutout from the closet videos. For each one the pipeline:
 
-Sixteen pieces came from the closet videos: frames were picked automatically where a
-garment was held up and still, un-mirrored (the front camera flips everything), and
-the garment separated from the person holding it.
+1. differences each frame against a median "empty room" plate to find the moments a
+   garment is held up and still;
+2. picks the sharpest frame in each of those moments;
+3. un-mirrors it — the front camera flips everything, so text read backwards;
+4. segments the foreground, then erodes the mask to break the arm holding the hanger
+   so the garment separates from the person;
+5. white-balances it off the concrete wall, which cancels the warm desk lamp.
 
-To re-render the drawn garments after editing `src/specs.js`:
-
-```bash
-npm run dev            # in one shell
-node tools/render.mjs  # writes public/wardrobe/gen/*.png
-```
+`src/source.json` records the provenance of each image.
 
 ## Run it
 
