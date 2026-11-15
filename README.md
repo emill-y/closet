@@ -25,7 +25,11 @@ scores your looks; and a wishlist tracks what to buy next.
 Each piece is either a **photo cutout** (background removed from the original wardrobe
 photo) or a **drawn garment** (a vector template tinted to the real colour, with the
 actual print or graphic lifted off the photo). `src/source.json` records which is which
-— currently 32 photos and 49 drawings. The originals live in `public/wardrobe/photo/`.
+— currently 48 photos and 49 drawings. The originals live in `public/wardrobe/photo/`.
+
+Sixteen pieces came from the closet videos: frames were picked automatically where a
+garment was held up and still, un-mirrored (the front camera flips everything), and
+the garment separated from the person holding it.
 
 To re-render the drawn garments after editing `src/specs.js`:
 

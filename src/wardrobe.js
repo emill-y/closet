@@ -87,6 +87,23 @@ const S = [
   ['b84', 'Lilac Sweat Shorts', 'bottom', 'shorts', 'lilac', 'short', 'cozy sporty girly casual', 1, 'solid'],
   ['b85', 'Distressed Denim Shorts', 'bottom', 'shorts', 'denim', 'short', 'casual beach street y2k', 1, 'solid'],
   ['b94', 'Black Floral Skort', 'bottom', 'shorts', 'black', 'short', 'sporty girly casual', 1, 'print'],
+  // added from the closet videos
+  ['n01', 'Light Grey Zip Hoodie', 'layer', 'hoodie', 'grey', 'oversized', 'cozy casual street campus', 3, 'solid'],
+  ['n02', 'Black Slim Long Sleeve', 'top', 'long sleeve', 'black', 'fitted', 'clean night casual edgy', 2, 'solid'],
+  ['n03', 'Patagonia Fleece Jacket', 'layer', 'fleece', 'charcoal', 'regular', 'sporty cozy campus street', 3, 'solid'],
+  ['n04', 'Columbia Business School Hoodie', 'layer', 'hoodie', 'navy', 'oversized', 'campus cozy street casual', 3, 'graphic'],
+  ['n05', 'Cream Boxy Tee', 'top', 'tee', 'cream', 'oversized', 'clean casual street', 1, 'solid'],
+  ['n06', 'Light-Wash Denim Jacket', 'layer', 'jacket', 'lightdenim', 'regular', 'casual street y2k campus', 2, 'solid'],
+  ['n07', 'Grey Gap Quarter-Zip', 'layer', 'fleece', 'charcoal', 'oversized', 'cozy campus sporty casual', 3, 'graphic'],
+  ['n08', 'Garden Floral Maxi Dress', 'dress', 'maxi dress', 'cream', 'regular', 'boho girly beach', 1, 'print'],
+  ['n09', 'Black Lace Long Sleeve', 'top', 'long sleeve', 'black', 'fitted', 'night edgy girly', 1, 'solid'],
+  ['n10', 'Black Draped Mesh Top', 'top', 'blouse', 'black', 'regular', 'night edgy', 1, 'solid'],
+  ['n11', 'SZA Hockey Jersey', 'top', 'long sleeve', 'white', 'oversized', 'street y2k campus sporty', 2, 'graphic'],
+  ['n12', 'Mauve Wide-Sleeve Top', 'top', 'blouse', 'brown', 'regular', 'clean girly night boho', 1, 'solid'],
+  ['n13', 'Navy Striped Jersey', 'top', 'tee', 'navy', 'oversized', 'sporty street campus casual', 1, 'solid'],
+  ['n14', 'Stussy Crewneck', 'layer', 'crewneck', 'white', 'oversized', 'street casual y2k', 3, 'graphic'],
+  ['n15', 'Brown Houndstooth Dress', 'dress', 'mini dress', 'brown', 'regular', 'preppy clean boho', 1, 'print'],
+  ['n16', 'Mustang Graphic Tee', 'top', 'tee', 'white', 'oversized', 'street y2k casual', 1, 'graphic'],
 ]
 
 export const SEED = S.map(([id, name, cat, sub, color, fit, vibes, warmth, pattern]) => ({
