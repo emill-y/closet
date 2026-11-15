@@ -1,0 +1,14 @@
+<!doctype html><meta charset="utf-8"><body><script type="module">
+import { renderGarment } from '/src/garment.js'
+import { SPECS } from '/src/specs.js'
+const load = (src) => new Promise((res) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = src })
+window.renderAll = async (ids) => {
+  const out = {}
+  for (const id of ids || Object.keys(SPECS)) {
+    const photo = await load(`/wardrobe/photo/${id}.webp`)
+    out[id] = renderGarment(SPECS[id], photo).toDataURL('image/png')
+  }
+  return out
+}
+window.ready = true
+</script></body>

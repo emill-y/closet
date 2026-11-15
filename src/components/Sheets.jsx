@@ -9,20 +9,29 @@ export function ItemSheet({ item, onClose, onStyle }) {
   const fav = favs.includes(item.id)
   return (
     <Sheet onClose={onClose}>
-      <img className="hero-img" src={item.img} alt={item.name} />
-      <span className="eyebrow">{item.sub}</span>
-      <h2 className="sheet-title">{item.name}</h2>
-      <div className="tags">
-        <span className="pill static"><Dot color={item.color} /> {item.color.replace('denim', ' denim').trim()}</span>
-        <span className="pill static">{item.fit}</span>
-        {item.vibes.map((v) => <span key={v} className="pill static">{v}</span>)}
+      <div className="detail">
+        <div className="shot"><img src={item.img} alt={item.name} /></div>
+        <div className="info">
+          <span className="mono">{item.cat === 'acc' ? 'accessory' : item.cat} / {item.sub}</span>
+          <h2>{item.name}</h2>
+          <div className="spec">
+            <div><span className="mono">Colour</span><b><Dot color={item.color} /> {item.color.replace('denim', ' denim').trim()}</b></div>
+            <div><span className="mono">Fit</span><b>{item.fit}</b></div>
+            <div><span className="mono">Pattern</span><b>{item.pattern}</b></div>
+            <div><span className="mono">Vibes</span><b>{item.vibes.join(', ')}</b></div>
+          </div>
+          <div className="row" style={{ justifyContent: 'flex-start', marginTop: 4 }}>
+            <button className="btn primary" onClick={() => onStyle(item)}><Icon n="wand" size={15} /> Style this piece</button>
+            <button className={'icon-btn heart' + (fav ? ' on' : '')} onClick={() => toggleFav(item.id)} aria-label="Love this">
+              <Icon n="heart" fill={fav} />
+            </button>
+            <button className="icon-btn" onClick={() => (confirm ? (removeItem(item.id), onClose()) : setConfirm(true))} aria-label="Remove from closet">
+              <Icon n="trash" />
+            </button>
+          </div>
+          {confirm && <p className="hint">Tap the bin again to take it out of your closet.</p>}
+        </div>
       </div>
-      <div className="row">
-        <button className="btn primary big" onClick={() => onStyle(item)}><Icon n="wand" size={18} /> Style this piece</button>
-        <button className={'icon-btn glass lg' + (fav ? ' loved' : '')} onClick={() => toggleFav(item.id)} aria-label="Favourite"><Icon n="heart" fill={fav} /></button>
-        <button className="icon-btn glass lg" onClick={() => (confirm ? (removeItem(item.id), onClose()) : setConfirm(true))} aria-label="Remove from closet"><Icon n="trash" /></button>
-      </div>
-      {confirm && <p className="hint">Tap the bin again to remove it from your closet.</p>}
     </Sheet>
   )
 }
@@ -31,26 +40,61 @@ const CAT_OPTS = [['top', 'Top'], ['bottom', 'Bottom'], ['dress', 'Dress'], ['la
 const DEF_FIT = { top: 'regular', bottom: 'straight', dress: 'fitted', layer: 'oversized', acc: 'regular', swim: 'fitted' }
 const hexRgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16))
 
-// centre-crop to a 480px square and guess the main colour from the middle of the photo
+/* Trim the photo to the garment, drop a plain background, and guess the colour. */
 function prepare(file) {
   return new Promise((res, rej) => {
     const img = new Image()
     img.onload = () => {
-      const s = Math.min(img.width, img.height), c = document.createElement('canvas')
-      c.width = c.height = 480
-      const x = c.getContext('2d')
-      x.drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, 480, 480)
-      const d = x.getImageData(168, 168, 144, 144).data
-      let r = 0, g = 0, b = 0, n = d.length / 4
-      for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2] }
-      r /= n; g /= n; b /= n
+      const MAX = 560
+      const sc = Math.min(1, MAX / Math.max(img.width, img.height))
+      const w = Math.round(img.width * sc), h = Math.round(img.height * sc)
+      const c = document.createElement('canvas')
+      c.width = w; c.height = h
+      const x = c.getContext('2d', { willReadFrequently: true })
+      x.drawImage(img, 0, 0, w, h)
+      const d = x.getImageData(0, 0, w, h)
+      const px = d.data
+      // background colour = average of the four corners
+      const corner = (cx, cy) => { const i = (cy * w + cx) * 4; return [px[i], px[i + 1], px[i + 2]] }
+      const cs = [corner(2, 2), corner(w - 3, 2), corner(2, h - 3), corner(w - 3, h - 3)]
+      const bg = [0, 1, 2].map((k) => cs.reduce((s, c2) => s + c2[k], 0) / 4)
+      const spread = Math.max(...cs.map((c2) => Math.hypot(c2[0] - bg[0], c2[1] - bg[1], c2[2] - bg[2])))
+      let minx = w, miny = h, maxx = 0, maxy = 0, hits = 0
+      let r = 0, g = 0, b = 0
+      if (spread < 46) { // corners agree: plain backdrop, so knock it out
+        const tol = 44
+        for (let i = 0, p = 0; i < px.length; i += 4, p++) {
+          const dist = Math.hypot(px[i] - bg[0], px[i + 1] - bg[1], px[i + 2] - bg[2])
+          if (dist < tol) { px[i + 3] = 0; continue }
+          if (dist < tol * 1.7) px[i + 3] = Math.round(255 * ((dist - tol) / (tol * 0.7)))
+          const cx = p % w, cy = (p / w) | 0
+          if (cx < minx) minx = cx; if (cx > maxx) maxx = cx
+          if (cy < miny) miny = cy; if (cy > maxy) maxy = cy
+          hits++; r += px[i]; g += px[i + 1]; b += px[i + 2]
+        }
+        x.putImageData(d, 0, 0)
+      }
+      if (hits < w * h * 0.02) { minx = 0; miny = 0; maxx = w - 1; maxy = h - 1; hits = 0 }
+      if (!hits) { // keep the whole frame; sample the middle for colour
+        const m = x.getImageData((w * 0.35) | 0, (h * 0.35) | 0, Math.max(1, (w * 0.3) | 0), Math.max(1, (h * 0.3) | 0)).data
+        for (let i = 0; i < m.length; i += 4) { r += m[i]; g += m[i + 1]; b += m[i + 2]; hits++ }
+      }
+      r /= hits; g /= hits; b /= hits
+      const pad = 6
+      minx = Math.max(0, minx - pad); miny = Math.max(0, miny - pad)
+      maxx = Math.min(w - 1, maxx + pad); maxy = Math.min(h - 1, maxy + pad)
+      const cw = maxx - minx + 1, ch = maxy - miny + 1
+      const o = document.createElement('canvas')
+      o.width = cw; o.height = ch
+      o.getContext('2d').drawImage(c, minx, miny, cw, ch, 0, 0, cw, ch)
       let best = 'black', bd = 1e9
       for (const [name, hex] of Object.entries(COLORS)) {
-        const [R, G, B] = hexRgb(hex), dist = (R - r) ** 2 + (G - g) ** 2 + (B - b) ** 2
-        if (dist < bd) { bd = dist; best = name }
+        const [R, G, B] = hexRgb(hex)
+        const dd = (R - r) ** 2 + (G - g) ** 2 + (B - b) ** 2
+        if (dd < bd) { bd = dd; best = name }
       }
       URL.revokeObjectURL(img.src)
-      res({ img: c.toDataURL('image/jpeg', 0.82), color: best })
+      res({ img: o.toDataURL('image/png'), color: best, ar: +(cw / ch).toFixed(2) })
     }
     img.onerror = rej
     img.src = URL.createObjectURL(file)
@@ -62,12 +106,15 @@ export function AddSheet({ onClose, preset }) {
   const file = useRef()
   const [queue, setQueue] = useState([])
   const [done, setDone] = useState(0)
+  const [busy, setBusy] = useState(false)
   const [f, setF] = useState(null)
 
   const blank = (p) => ({ name: preset?.name || '', cat: 'top', sub: 'tee', fit: 'regular', vibes: ['casual'], pattern: 'solid', warmth: 1, ...p })
   const pickFiles = async (e) => {
+    setBusy(true)
     const out = []
-    for (const fl of [...e.target.files]) { try { out.push(await prepare(fl)) } catch { /* skip unreadable */ } }
+    for (const fl of [...e.target.files]) { try { out.push(await prepare(fl)) } catch { /* unreadable, skip */ } }
+    setBusy(false)
     if (out.length) { setQueue(out); setF(blank(out[0])) }
   }
   useEffect(() => { if (queue.length && !f) setF(blank(queue[0])) }, [queue]) // eslint-disable-line
@@ -78,48 +125,63 @@ export function AddSheet({ onClose, preset }) {
     setDone((d) => d + 1)
     const rest = queue.slice(1)
     setQueue(rest)
-    if (rest.length) setF(blank(rest[0])); else { preset?.onAdded?.(); onClose() }
+    if (rest.length) setF(blank(rest[0]))
+    else { preset?.onAdded?.(); onClose() }
   }
 
   return (
-    <Sheet onClose={onClose}>
-      <span className="eyebrow">new in</span>
-      <h2 className="sheet-title">Add to <em>closet</em></h2>
-      <input ref={file} type="file" accept="image/*" multiple hidden onChange={pickFiles} />
-      {!f ? (
-        <>
-          <button className="drop glass" onClick={() => file.current.click()}>
-            <Icon n="plus" size={28} />
-            <b>Choose photos</b>
-            <span>Pick one or a whole batch — lay it flat or hang it up, centred in the frame.</span>
-          </button>
-          <p className="hint">Photos stay on this device (saved in your browser).</p>
-        </>
-      ) : (
-        <div className="add-form">
-          <div className="add-top">
-            <img src={f.img} alt="" />
-            <div className="fields">
-              {queue.length > 1 && <span className="eyebrow">{done + 1} of {done + queue.length}</span>}
-              <input className="input" placeholder="Name it (e.g. Brown leather jacket)" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
-              <div className="chips wrap">{CAT_OPTS.map(([id, l]) => <Chip key={id} active={f.cat === id} onClick={() => setCat(id)}>{l}</Chip>)}</div>
+    <Sheet onClose={onClose} narrow={!f}>
+      <div className="add-body">
+        <span className="mono">New in</span>
+        <h2 className="serif" style={{ fontSize: 30, lineHeight: 1.05 }}>Add to the rail</h2>
+        <input ref={file} type="file" accept="image/*" multiple hidden onChange={pickFiles} />
+        {!f ? (
+          <>
+            <button className="drop" onClick={() => file.current.click()} disabled={busy}>
+              <Icon n="plus" size={26} />
+              <b>{busy ? 'Reading photos…' : 'Choose photos'}</b>
+              <span>One or a whole batch. Shoot against a plain wall or floor and the background gets knocked out automatically.</span>
+            </button>
+            <p className="hint">Photos stay on this device — they&rsquo;re saved in your browser, not uploaded.</p>
+          </>
+        ) : (
+          <div className="add-form">
+            <div className="add-top">
+              <img src={f.img} alt="" />
+              <div className="fields">
+                {queue.length > 1 && <span className="mono">{done + 1} of {done + queue.length}</span>}
+                <input className="input" placeholder="Name it (e.g. Brown leather jacket)" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} autoFocus />
+                <div className="chips wrap">{CAT_OPTS.map(([id, l]) => <Chip key={id} active={f.cat === id} onClick={() => setCat(id)}>{l}</Chip>)}</div>
+              </div>
             </div>
+            <label>Type</label>
+            <div className="chips wrap">{SUBS[f.cat].map((s) => <Chip key={s} active={f.sub === s} onClick={() => setF({ ...f, sub: s })}>{s}</Chip>)}</div>
+            <label>Colour <small>— auto-picked, tap to fix</small></label>
+            <div className="swatches">
+              {Object.entries(COLORS).map(([n, hex]) => (
+                <button key={n} title={n} className={'swatch' + (f.color === n ? ' on' : '')} style={{ background: hex }} onClick={() => setF({ ...f, color: n })} />
+              ))}
+            </div>
+            <label>Fit</label>
+            <div className="chips wrap">{FITS.map((s) => <Chip key={s} active={f.fit === s} onClick={() => setF({ ...f, fit: s })}>{s}</Chip>)}</div>
+            <label>Vibes</label>
+            <div className="chips wrap">
+              {VIBES.map((v) => (
+                <Chip key={v} active={f.vibes.includes(v)} onClick={() => setF({ ...f, vibes: f.vibes.includes(v) ? f.vibes.filter((x) => x !== v) : [...f.vibes, v] })}>{v}</Chip>
+              ))}
+            </div>
+            <div className="chips wrap" style={{ marginTop: 10 }}>
+              {[['solid', 'Solid'], ['graphic', 'Graphic'], ['print', 'Print']].map(([id, l]) => (
+                <Chip key={id} active={f.pattern === id} onClick={() => setF({ ...f, pattern: id })}>{l}</Chip>
+              ))}
+              <Chip active={f.warmth === 3} onClick={() => setF({ ...f, warmth: f.warmth === 3 ? 1 : 3 })}>Warm piece</Chip>
+            </div>
+            <button className="btn primary big wide" style={{ marginTop: 14 }} onClick={save} disabled={!f.vibes.length}>
+              <Icon n="hanger" size={15} /> Hang it up{queue.length > 1 ? ' · next' : ''}
+            </button>
           </div>
-          <label>Type</label>
-          <div className="chips wrap">{SUBS[f.cat].map((s) => <Chip key={s} active={f.sub === s} onClick={() => setF({ ...f, sub: s })}>{s}</Chip>)}</div>
-          <label>Colour <small>(auto-picked — tap to fix)</small></label>
-          <div className="swatches">{Object.entries(COLORS).map(([n, hex]) => <button key={n} title={n} className={'swatch' + (f.color === n ? ' on' : '')} style={{ background: hex }} onClick={() => setF({ ...f, color: n })} />)}</div>
-          <label>Fit</label>
-          <div className="chips wrap">{FITS.map((s) => <Chip key={s} active={f.fit === s} onClick={() => setF({ ...f, fit: s })}>{s}</Chip>)}</div>
-          <label>Vibes</label>
-          <div className="chips wrap">{VIBES.map((v) => <Chip key={v} active={f.vibes.includes(v)} onClick={() => setF({ ...f, vibes: f.vibes.includes(v) ? f.vibes.filter((x) => x !== v) : [...f.vibes, v] })}>{v}</Chip>)}</div>
-          <div className="chips wrap">
-            {[['solid', 'Solid'], ['graphic', 'Graphic'], ['print', 'Print']].map(([id, l]) => <Chip key={id} active={f.pattern === id} onClick={() => setF({ ...f, pattern: id })}>{l}</Chip>)}
-            <Chip active={f.warmth === 3} onClick={() => setF({ ...f, warmth: f.warmth === 3 ? 1 : 3 })}>❄️ Warm piece</Chip>
-          </div>
-          <button className="btn primary big wide" onClick={save} disabled={!f.vibes.length}><Icon n="hanger" size={18} /> Hang it up{queue.length > 1 ? ' · next' : ''}</button>
-        </div>
-      )}
+        )}
+      </div>
     </Sheet>
   )
 }

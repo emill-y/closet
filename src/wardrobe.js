@@ -1,3 +1,8 @@
+import AR from './ar.json'
+import SOURCE from './source.json'
+import { SPECS } from './specs'
+import { garmentMeta } from './garment'
+
 // Seed wardrobe — cropped from the two Photos-app screenshots.
 // [id, name, cat, sub, color, fit, vibes, warmth, pattern]
 const S = [
@@ -85,7 +90,9 @@ const S = [
 ]
 
 export const SEED = S.map(([id, name, cat, sub, color, fit, vibes, warmth, pattern]) => ({
-  id, name, cat, sub, color, fit, vibes: vibes.split(' '), warmth, pattern, img: `/wardrobe/${id}.webp`,
+  id, name, cat, sub, color, fit, vibes: vibes.split(' '), warmth, pattern,
+  img: `/cut/${id}.webp`, photo: `/wardrobe/photo/${id}.webp`, ar: AR[id] || 0.92, src: SOURCE[id] || 'drawn',
+  hang: SPECS[id] ? garmentMeta(SPECS[id]).kind : 'top',
 }))
 
 export const CATS = [
