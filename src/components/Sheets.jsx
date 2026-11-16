@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Chip, Dot, Icon, Sheet } from './ui'
 import { COLORS, SUBS, FITS, VIBES } from '../wardrobe'
 import { useStore } from '../store'
+import { cutOut, warmUp } from '../cutout'
 
 export function ItemSheet({ item, onClose, onStyle }) {
   const { favs, toggleFav, removeItem } = useStore()
@@ -39,66 +40,73 @@ export function ItemSheet({ item, onClose, onStyle }) {
 const CAT_OPTS = [['top', 'Top'], ['bottom', 'Bottom'], ['dress', 'Dress'], ['layer', 'Layer'], ['acc', 'Extra'], ['swim', 'Swim']]
 const DEF_FIT = { top: 'regular', bottom: 'straight', dress: 'fitted', layer: 'oversized', acc: 'regular', swim: 'fitted' }
 const hexRgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16))
+const nearestColour = ([r, g, b]) => {
+  let best = 'black', bd = Infinity
+  for (const [name, hex] of Object.entries(COLORS)) {
+    const [R, G, B] = hexRgb(hex)
+    const d = (R - r) ** 2 + (G - g) ** 2 + (B - b) ** 2
+    if (d < bd) { bd = d; best = name }
+  }
+  return best
+}
 
-/* Trim the photo to the garment, drop a plain background, and guess the colour. */
-function prepare(file) {
-  return new Promise((res, rej) => {
-    const img = new Image()
-    img.onload = () => {
-      const MAX = 560
-      const sc = Math.min(1, MAX / Math.max(img.width, img.height))
-      const w = Math.round(img.width * sc), h = Math.round(img.height * sc)
-      const c = document.createElement('canvas')
-      c.width = w; c.height = h
-      const x = c.getContext('2d', { willReadFrequently: true })
-      x.drawImage(img, 0, 0, w, h)
-      const d = x.getImageData(0, 0, w, h)
-      const px = d.data
-      // background colour = average of the four corners
-      const corner = (cx, cy) => { const i = (cy * w + cx) * 4; return [px[i], px[i + 1], px[i + 2]] }
-      const cs = [corner(2, 2), corner(w - 3, 2), corner(2, h - 3), corner(w - 3, h - 3)]
-      const bg = [0, 1, 2].map((k) => cs.reduce((s, c2) => s + c2[k], 0) / 4)
-      const spread = Math.max(...cs.map((c2) => Math.hypot(c2[0] - bg[0], c2[1] - bg[1], c2[2] - bg[2])))
-      let minx = w, miny = h, maxx = 0, maxy = 0, hits = 0
-      let r = 0, g = 0, b = 0
-      if (spread < 46) { // corners agree: plain backdrop, so knock it out
-        const tol = 44
-        for (let i = 0, p = 0; i < px.length; i += 4, p++) {
-          const dist = Math.hypot(px[i] - bg[0], px[i + 1] - bg[1], px[i + 2] - bg[2])
-          if (dist < tol) { px[i + 3] = 0; continue }
-          if (dist < tol * 1.7) px[i + 3] = Math.round(255 * ((dist - tol) / (tol * 0.7)))
-          const cx = p % w, cy = (p / w) | 0
-          if (cx < minx) minx = cx; if (cx > maxx) maxx = cx
-          if (cy < miny) miny = cy; if (cy > maxy) maxy = cy
-          hits++; r += px[i]; g += px[i + 1]; b += px[i + 2]
-        }
-        x.putImageData(d, 0, 0)
-      }
-      if (hits < w * h * 0.02) { minx = 0; miny = 0; maxx = w - 1; maxy = h - 1; hits = 0 }
-      if (!hits) { // keep the whole frame; sample the middle for colour
-        const m = x.getImageData((w * 0.35) | 0, (h * 0.35) | 0, Math.max(1, (w * 0.3) | 0), Math.max(1, (h * 0.3) | 0)).data
-        for (let i = 0; i < m.length; i += 4) { r += m[i]; g += m[i + 1]; b += m[i + 2]; hits++ }
-      }
-      r /= hits; g /= hits; b /= hits
-      const pad = 6
-      minx = Math.max(0, minx - pad); miny = Math.max(0, miny - pad)
-      maxx = Math.min(w - 1, maxx + pad); maxy = Math.min(h - 1, maxy + pad)
-      const cw = maxx - minx + 1, ch = maxy - miny + 1
-      const o = document.createElement('canvas')
-      o.width = cw; o.height = ch
-      o.getContext('2d').drawImage(c, minx, miny, cw, ch, 0, 0, cw, ch)
-      let best = 'black', bd = 1e9
-      for (const [name, hex] of Object.entries(COLORS)) {
-        const [R, G, B] = hexRgb(hex)
-        const dd = (R - r) ** 2 + (G - g) ** 2 + (B - b) ** 2
-        if (dd < bd) { bd = dd; best = name }
-      }
-      URL.revokeObjectURL(img.src)
-      res({ img: o.toDataURL('image/png'), color: best, ar: +(cw / ch).toFixed(2) })
+/* If the model can't load, fall back to knocking out a plain backdrop. */
+function plainBackdrop(bitmap) {
+  const MAX = 640
+  const sc = Math.min(1, MAX / Math.max(bitmap.width, bitmap.height))
+  const w = Math.round(bitmap.width * sc), h = Math.round(bitmap.height * sc)
+  const c = document.createElement('canvas')
+  c.width = w; c.height = h
+  const x = c.getContext('2d', { willReadFrequently: true })
+  x.drawImage(bitmap, 0, 0, w, h)
+  const d = x.getImageData(0, 0, w, h)
+  const px = d.data
+  const corner = (cx, cy) => { const i = (cy * w + cx) * 4; return [px[i], px[i + 1], px[i + 2]] }
+  const cs = [corner(2, 2), corner(w - 3, 2), corner(2, h - 3), corner(w - 3, h - 3)]
+  const bg = [0, 1, 2].map((k) => cs.reduce((s2, c2) => s2 + c2[k], 0) / 4)
+  const spread = Math.max(...cs.map((c2) => Math.hypot(c2[0] - bg[0], c2[1] - bg[1], c2[2] - bg[2])))
+  let minx = w, miny = h, maxx = 0, maxy = 0, hits = 0, r = 0, g = 0, b = 0
+  if (spread < 46) {
+    const tol = 44
+    for (let i = 0, p = 0; i < px.length; i += 4, p++) {
+      const dist = Math.hypot(px[i] - bg[0], px[i + 1] - bg[1], px[i + 2] - bg[2])
+      if (dist < tol) { px[i + 3] = 0; continue }
+      if (dist < tol * 1.7) px[i + 3] = Math.round(255 * ((dist - tol) / (tol * 0.7)))
+      const cx = p % w, cy = (p / w) | 0
+      if (cx < minx) minx = cx
+      if (cx > maxx) maxx = cx
+      if (cy < miny) miny = cy
+      if (cy > maxy) maxy = cy
+      hits++; r += px[i]; g += px[i + 1]; b += px[i + 2]
     }
-    img.onerror = rej
-    img.src = URL.createObjectURL(file)
-  })
+    x.putImageData(d, 0, 0)
+  }
+  if (hits < w * h * 0.02) { minx = 0; miny = 0; maxx = w - 1; maxy = h - 1; hits = 0 }
+  if (!hits) {
+    const m = x.getImageData((w * 0.35) | 0, (h * 0.35) | 0, Math.max(1, (w * 0.3) | 0), Math.max(1, (h * 0.3) | 0)).data
+    for (let i = 0; i < m.length; i += 4) { r += m[i]; g += m[i + 1]; b += m[i + 2]; hits++ }
+  }
+  const pad = 6
+  minx = Math.max(0, minx - pad); miny = Math.max(0, miny - pad)
+  maxx = Math.min(w - 1, maxx + pad); maxy = Math.min(h - 1, maxy + pad)
+  const cw = maxx - minx + 1, ch = maxy - miny + 1
+  const o = document.createElement('canvas')
+  o.width = cw; o.height = ch
+  o.getContext('2d').drawImage(c, minx, miny, cw, ch, 0, 0, cw, ch)
+  return { img: o.toDataURL('image/png'), color: nearestColour([r / hits, g / hits, b / hits]), ar: +(cw / ch).toFixed(3) }
+}
+
+async function prepare(file) {
+  const bitmap = await createImageBitmap(file)
+  try {
+    const r = await cutOut(bitmap)
+    if (r) return { img: r.canvas.toDataURL('image/png'), color: nearestColour(r.rgb), ar: r.ar }
+  } catch (e) {
+    console.warn('cutout model unavailable, using plain-backdrop fallback', e)
+  } finally {
+    bitmap.close?.()
+  }
+  return plainBackdrop(await createImageBitmap(file))
 }
 
 export function AddSheet({ onClose, preset }) {
@@ -106,17 +114,23 @@ export function AddSheet({ onClose, preset }) {
   const file = useRef()
   const [queue, setQueue] = useState([])
   const [done, setDone] = useState(0)
-  const [busy, setBusy] = useState(false)
+  const [busy, setBusy] = useState('')
   const [f, setF] = useState(null)
 
   const blank = (p) => ({ name: preset?.name || '', cat: 'top', sub: 'tee', fit: 'regular', vibes: ['casual'], pattern: 'solid', warmth: 1, ...p })
   const pickFiles = async (e) => {
-    setBusy(true)
+    const files = [...e.target.files]
+    if (!files.length) return
     const out = []
-    for (const fl of [...e.target.files]) { try { out.push(await prepare(fl)) } catch { /* unreadable, skip */ } }
-    setBusy(false)
+    for (let i = 0; i < files.length; i++) {
+      setBusy(files.length > 1 ? `Cutting out ${i + 1} of ${files.length}…` : 'Cutting out the background…')
+      await new Promise((r) => setTimeout(r)) // let the label paint
+      try { out.push(await prepare(files[i])) } catch { /* unreadable, skip */ }
+    }
+    setBusy('')
     if (out.length) { setQueue(out); setF(blank(out[0])) }
   }
+  useEffect(() => { warmUp() }, [])
   useEffect(() => { if (queue.length && !f) setF(blank(queue[0])) }, [queue]) // eslint-disable-line
 
   const setCat = (cat) => setF((s) => ({ ...s, cat, sub: SUBS[cat][0], fit: DEF_FIT[cat], warmth: cat === 'layer' ? 3 : 1 }))
@@ -139,10 +153,10 @@ export function AddSheet({ onClose, preset }) {
           <>
             <button className="drop" onClick={() => file.current.click()} disabled={busy}>
               <Icon n="plus" size={26} />
-              <b>{busy ? 'Reading photos…' : 'Choose photos'}</b>
-              <span>One or a whole batch. Shoot against a plain wall or floor and the background gets knocked out automatically.</span>
+              <b>{busy || 'Choose photos'}</b>
+              <span>One or a whole batch. The background is cut away automatically — any room, any backdrop.</span>
             </button>
-            <p className="hint">Photos stay on this device — they&rsquo;re saved in your browser, not uploaded.</p>
+            <p className="hint">Everything happens on this device — the cutout runs in your browser and nothing is uploaded.</p>
           </>
         ) : (
           <div className="add-form">

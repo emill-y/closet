@@ -34,6 +34,22 @@ Every piece is a cutout from the closet videos. For each one the pipeline:
 
 `src/source.json` records the provenance of each image.
 
+## Cutting out photos you add
+
+`src/cutout.js` removes the background client-side — nothing is uploaded and there is
+no API key. It runs **u2netp** (4.6 MB) through `onnxruntime-web`, fetched once on the
+first add and cached by the browser thereafter:
+
+- the model is served from `public/models/`, the wasm runtime from `public/ort/`;
+- single-threaded on purpose, so no COOP/COEP headers are needed on the host;
+- the mask is cleaned up in JS — largest blob only, interior holes filled, rim
+  feathered by the model's own confidence;
+- if the model finds nothing salient (a grey garment flat on a wood floor is the
+  usual culprit), it falls back to a border-colour prior, which is what rescues
+  flat-lays; if that fails too, it knocks out a plain backdrop the old way.
+
+Expect roughly 1-3 seconds a photo on a laptop.
+
 ## Run it
 
 ```bash
